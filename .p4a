@@ -1,0 +1,11 @@
+--bootstrap webview
+--package com.dbnicholson.SafTest
+--name "SAF Browser Test"
+--dist_name saftest
+--version 0.1
+--private src
+--requirements flask
+--orientation sensor
+--android-api 30
+--minsdk 21
+--arch x86_64

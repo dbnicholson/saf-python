@@ -1,0 +1,4 @@
+*.apk
+*.pyc
+__pycache__/
+venv/
