@@ -1,4 +1,6 @@
 from browser import app
+import logging
 
 
-app.run(debug=False, threaded=False)
+logging.basicConfig(level=logging.INFO)
+app.run(debug=False)
