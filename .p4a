@@ -9,3 +9,5 @@
 --android-api 30
 --minsdk 21
 --arch x86_64
+--enable-androidx
+--depend "androidx.documentfile:documentfile:1.0.1"

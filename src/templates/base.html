@@ -10,6 +10,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
   </head>
   <body>
+    <header>
+      <a href="{{ url_for('index') }}">Home</a>
+      <a href="{{ url_for('open_directory') }}">Open Directory</a>
+    </header>
     {%- block body %}
     {% endblock -%}
   </body>
