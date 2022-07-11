@@ -17,7 +17,9 @@
   {% endfor -%}
   {%- for file in content.files %}
   <tr>
-    <td>{{ file.name }}</td>
+    <td>
+      <a href="{{ url_for('view_file', uri=file.uri) }}">{{ file.name }}</a>
+    </td>
     <td align="right">
       {{ file.last_modified }}
     </td>

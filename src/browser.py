@@ -7,7 +7,7 @@ from flask import (
     request,
     url_for,
 )
-from jnius import autoclass
+from jnius import autoclass, JavaException
 import logging
 
 logger = logging.getLogger(__name__)
@@ -56,10 +56,41 @@ class Browser(Flask):
             self.OPEN_DIRECTORY_REQUEST_CODE,
         )
 
+    def view_file(self, uri):
+        if isinstance(uri, str):
+            uri = Uri.parse(uri)
+        intent = Intent(Intent.ACTION_VIEW, uri)
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try:
+            self.activity.startActivity(intent)
+            return True
+        except JavaException as err:
+            if err.classname == 'android.content.ActivityNotFoundException':
+                return False
+            raise
+
+    def read_file(self, uri):
+        if isinstance(uri, str):
+            uri = Uri.parse(uri)
+        stream = self.content_resolver.openInputStream(uri)
+        content = bytearray()
+        while True:
+            buf = bytearray(8192)
+            num = stream.read(buf)
+            if num == -1:
+                break
+            content += buf[:num]
+        return content
+
     def get_tree(self, uri):
         if isinstance(uri, str):
             uri = Uri.parse(uri)
         return DocumentFile.fromTreeUri(self.activity, uri)
+
+    def get_file(self, uri):
+        if isinstance(uri, str):
+            uri = Uri.parse(uri)
+        return DocumentFile.fromSingleUri(self.activity, uri)
 
 
 app = Browser(__name__)
@@ -112,3 +143,27 @@ def index():
 def open_directory():
     current_app.open_directory()
     return ('', 204)
+
+
+@app.route('/view')
+def view_file():
+    uri = request.args.get('uri')
+    if uri is None:
+        return ('No uri argument specified', 400)
+
+    doc_uri = Uri.parse(uri)
+    if current_app.view_file(doc_uri):
+        return ('', 204)
+
+    doc = current_app.get_file(doc_uri)
+    doc_type = doc.getType()
+    text_doc_types = (
+        'application/json',
+        'text/plain',
+    )
+    logger.info('Document %s MIME: %s', uri, doc_type)
+    if doc_type in text_doc_types:
+        text = current_app.read_file(doc_uri).decode('utf-8')
+        return (text, 200)
+
+    return ('Cannot view file', 415)
