@@ -56,11 +56,10 @@ class Browser(Flask):
             self.OPEN_DIRECTORY_REQUEST_CODE,
         )
 
-    def get_tree_documents(self, uri):
+    def get_tree(self, uri):
         if isinstance(uri, str):
             uri = Uri.parse(uri)
-        tree = DocumentFile.fromTreeUri(self.activity, uri)
-        return tree.listFiles()
+        return DocumentFile.fromTreeUri(self.activity, uri)
 
 
 app = Browser(__name__)
@@ -72,12 +71,14 @@ def index():
     uri = request.args.get('uri')
     if uri:
         logger.info('Rendering tree URI %s', uri)
+        tree = current_app.get_tree(uri)
         directories = []
         files = []
-        for doc in current_app.get_tree_documents(uri):
+        for doc in tree.listFiles():
             if doc.isDirectory():
                 directories.append({
                     'name': doc.getName(),
+                    'uri': doc.getUri().toString(),
                 })
             else:
                 # DocumentFile.lastModified() returns milliseconds since
@@ -87,11 +88,12 @@ def index():
                 )
                 files.append({
                     'name': doc.getName(),
+                    'uri': doc.getUri().toString(),
                     'last_modified': last_modified,
                     'size': doc.length(),
                 })
 
-        name = DocumentsContract.getTreeDocumentId(Uri.parse(uri))
+        name = DocumentsContract.getDocumentId(tree.getUri())
         content = {
             'name': name,
             'directories': directories,
