@@ -1,4 +1,5 @@
 import android.activity
+from contextlib import closing
 from datetime import datetime
 from flask import (
     Flask,
@@ -14,6 +15,7 @@ import os
 logger = logging.getLogger(__name__)
 
 Activity = autoclass('android.app.Activity')
+Document = autoclass('android.provider.DocumentsContract$Document')
 DocumentFile = autoclass('androidx.documentfile.provider.DocumentFile')
 DocumentsContract = autoclass('android.provider.DocumentsContract')
 Intent = autoclass('android.content.Intent')
@@ -124,6 +126,39 @@ class Browser(Flask):
             uri = Uri.parse(uri)
         return DocumentFile.fromSingleUri(self.activity, uri)
 
+    def list_files(self, tree_doc_uri):
+        tree_doc_id = DocumentsContract.getDocumentId(tree_doc_uri)
+        children_uri = DocumentsContract.buildChildDocumentsUriUsingTree(
+            tree_doc_uri, tree_doc_id
+        )
+
+        columns = [
+            Document.COLUMN_DISPLAY_NAME,
+            Document.COLUMN_DOCUMENT_ID,
+            Document.COLUMN_LAST_MODIFIED,
+            Document.COLUMN_MIME_TYPE,
+            Document.COLUMN_SIZE,
+        ]
+        results = []
+        with closing(
+            self.content_resolver.query(children_uri, columns, None, None)
+        ) as cursor:
+            while cursor.moveToNext():
+                entry = {
+                    'name': cursor.getString(0),
+                    'id': cursor.getString(1),
+                    'last_modified': cursor.getLong(2),
+                    'mime_type': cursor.getString(3),
+                    'size': cursor.getLong(4),
+                }
+                doc_uri = DocumentsContract.buildDocumentUriUsingTree(
+                    tree_doc_uri, entry['id']
+                )
+                entry['uri'] = doc_uri.toString()
+                results.append(entry)
+
+        return results
+
 
 app = Browser(__name__)
 app.config['SERVER_NAME'] = '127.0.0.1:5000'
@@ -137,29 +172,29 @@ def index():
 
     if uri:
         logger.info('Rendering tree URI %s', uri)
-        tree = current_app.get_tree(uri)
+        tree_doc_uri = current_app.get_tree(uri).getUri()
         directories = []
         files = []
-        for doc in tree.listFiles():
-            if doc.isDirectory():
+        for doc in current_app.list_files(tree_doc_uri):
+            if doc['mime_type'] == Document.MIME_TYPE_DIR:
                 directories.append({
-                    'name': doc.getName(),
-                    'uri': doc.getUri().toString(),
+                    'name': doc['name'],
+                    'uri': doc['uri'],
                 })
             else:
-                # DocumentFile.lastModified() returns milliseconds since
-                # the epoch.
+                # Document.COLUMN_LAST_MODIFIED returns milliseconds
+                # since the epoch.
                 last_modified = datetime.fromtimestamp(
-                    doc.lastModified() / 1000
+                    doc['last_modified'] / 1000
                 )
                 files.append({
-                    'name': doc.getName(),
-                    'uri': doc.getUri().toString(),
+                    'name': doc['name'],
+                    'uri': doc['uri'],
                     'last_modified': last_modified,
-                    'size': doc.length(),
+                    'size': doc['size'],
                 })
 
-        name = DocumentsContract.getDocumentId(tree.getUri())
+        name = DocumentsContract.getDocumentId(tree_doc_uri)
         content = {
             'name': name,
             'directories': directories,
