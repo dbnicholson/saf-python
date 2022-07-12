@@ -9,6 +9,7 @@ from flask import (
 )
 from jnius import autoclass, JavaException
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -69,18 +70,33 @@ class Browser(Flask):
                 return False
             raise
 
-    def read_file(self, uri):
-        if isinstance(uri, str):
-            uri = Uri.parse(uri)
-        stream = self.content_resolver.openInputStream(uri)
-        content = bytearray()
-        while True:
-            buf = bytearray(8192)
-            num = stream.read(buf)
-            if num == -1:
-                break
-            content += buf[:num]
-        return content
+    def file_opener(self, path, flags):
+        # Convert from open flags to Java File modes.
+        #
+        # https://developer.android.com/reference/android/os/ParcelFileDescriptor#parseMode(java.lang.String)
+        logger.debug('Requested opening %s with flags %s', path, bin(flags))
+        if flags & os.O_RDWR:
+            mode = 'rw'
+        elif flags & os.O_WRONLY:
+            mode = 'w'
+        else:
+            mode = 'r'
+
+        if flags & os.O_APPEND:
+            mode += 'a'
+        if flags & os.O_TRUNC:
+            mode += 't'
+
+        uri = Uri.parse(path)
+        afd = self.content_resolver.openAssetFileDescriptor(uri, mode)
+        pfd = afd.getParcelFileDescriptor()
+        return pfd.detachFd()
+
+    def open_file(self, uri, mode='r', **kwargs):
+        if isinstance(uri, Uri):
+            uri = uri.toString()
+        kwargs['opener'] = self.file_opener
+        return open(uri, mode, **kwargs)
 
     def get_tree(self, uri):
         if isinstance(uri, str):
@@ -163,7 +179,8 @@ def view_file():
     )
     logger.info('Document %s MIME: %s', uri, doc_type)
     if doc_type in text_doc_types:
-        text = current_app.read_file(doc_uri).decode('utf-8')
+        with current_app.open_file(uri, 'rb') as f:
+            text = f.read()
         return (text, 200)
 
     return ('Cannot view file', 415)
