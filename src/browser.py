@@ -28,8 +28,23 @@ class Browser(Flask):
         super().__init__(*args, **kwargs)
         self.activity = PythonActivity.mActivity
         self.content_resolver = self.activity.getContentResolver()
+        self.preferences = self.activity.getSharedPreferences(
+            self.activity.getLocalClassName(), Activity.MODE_PRIVATE
+        )
 
         android.activity.bind(on_activity_result=self.on_activity_result)
+
+    def get_default_tree_uri(self):
+        uri = self.preferences.getString('tree_uri', None)
+        logger.info('Found default tree URI %s', uri)
+        return uri
+
+    def set_default_tree_uri(self, uri):
+        uri = uri.toString()
+        editor = self.preferences.edit()
+        logger.info('Setting default tree URI to %s', uri)
+        editor.putString('tree_uri', uri)
+        editor.commit()
 
     def on_activity_result(self, request, result, intent):
         if request == self.OPEN_DIRECTORY_REQUEST_CODE:
@@ -41,6 +56,7 @@ class Browser(Flask):
             tree_id = DocumentsContract.getTreeDocumentId(uri)
             logger.info('User chose directory "%s" (%s)',
                         uri.toString(), tree_id)
+            self.set_default_tree_uri(uri)
 
             logger.info('Persisting read permissions for "%s"', uri.toString())
             flags = intent.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -116,6 +132,9 @@ app.config['SERVER_NAME'] = '127.0.0.1:5000'
 @app.route('/')
 def index():
     uri = request.args.get('uri')
+    if not uri:
+        uri = current_app.get_default_tree_uri()
+
     if uri:
         logger.info('Rendering tree URI %s', uri)
         tree = current_app.get_tree(uri)
